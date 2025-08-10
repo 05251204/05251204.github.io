@@ -16,7 +16,7 @@ const comiketData = {
         "tweet": "https://x.com/0500mL/status/1870412737089868231"
     },
     {
-        "space": "東Ａ-43a",
+        "space": "東A43a",
         "user": "https://x.com/oomori_11",
         "tweet": "https://x.com/oomori_11/status/1872485102686745021"
     },
@@ -36,7 +36,7 @@ const comiketData = {
         "tweet": "https://x.com/BreakCode1015/status/1872930488890905030"
     },
     {
-        "space": "東Ｈ41ab",
+        "space": "東H41ab",
         "user": "https://x.com/AliceFlag",
         "tweet": "https://x.com/AliceFlag/status/1868867929812660421"
     },

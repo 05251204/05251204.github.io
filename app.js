@@ -1,6 +1,6 @@
-// localStorageから購入済みリストを読み込む。データがなければ空の配列を使う。
 let purchasedList = JSON.parse(localStorage.getItem('purchasedList')) || [];
 let currentTarget = null;
+let comiketData = { wantToBuy: [] }; // Initialize with empty array
 
 const labelOptions = {
     '東456': 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨ'.split(''),
@@ -9,12 +9,227 @@ const labelOptions = {
     '南12': 'abcdefghijklmnopqrst'.split('')
 };
 
+// --- Data Loading and Initialization ---
+async function loadDataAndInitialize() {
+    const webAppURL = 'https://script.google.com/macros/s/AKfycbzETF2Hl4rsLBObOcpK736wiavYput5AsXdyUIl9czz8NgW9mFkrksKtLy8sZDbE5A/exec';
+    try {
+        const response = await fetch(webAppURL);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const data = await response.json();
+        comiketData.wantToBuy = data.wantToBuy || [];
+        updateRemainingCounts();
+    } catch (error) {
+        console.error('Error loading sheet data via Apps Script:', error);
+        document.getElementById('loading').textContent = 'データの読み込みに失敗しました。';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    updateLabelOptions();
+    loadDataAndInitialize();
+});
+
+// --- UI Event Handlers ---
+document.getElementById('current-ewsn').addEventListener('change', updateLabelOptions);
+
+document.getElementById('purchased-btn').addEventListener('click', () => {
+    if (!currentTarget || !currentTarget.space) return;
+
+    const spaceToUpdate = currentTarget.space;
+
+    // --- Fire-and-forget Request ---
+    // Update the sheet in the background. We don't wait for the response.
+    // We only log the result for debugging, without alerting the user.
+    const webAppURL = 'https://script.google.com/macros/s/AKfycbzETF2Hl4rsLBObOcpK736wiavYput5AsXdyUIl9czz8NgW9mFkrksKtLy8sZDbE5A/exec';
+    fetch(webAppURL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ space: spaceToUpdate })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status !== 'success') {
+            console.error('Background sheet update failed:', data.message);
+        } else {
+            console.log(`Background sheet update successful for ${spaceToUpdate}.`);
+        }
+    })
+    .catch(error => {
+        console.error('Background sheet update fetch failed:', error);
+    });
+
+    // --- Immediate UI Update ---
+    const purchasedBtn = document.getElementById('purchased-btn');
+    purchasedBtn.disabled = true; // Briefly disable to prevent double-clicks
+
+    // Update local data immediately
+    comiketData.wantToBuy = comiketData.wantToBuy.filter(c => c.space !== spaceToUpdate);
+    purchasedList.push(spaceToUpdate);
+    localStorage.setItem('purchasedList', JSON.stringify(purchasedList));
+    
+    const [ewsn, label, number] = distinct_space(spaceToUpdate);
+    document.getElementById('current-ewsn').value = ewsn;
+    updateLabelOptions();
+    document.getElementById('current-label').value = label;
+    document.getElementById('current-number').value = number;
+
+    // Recalculate and display the next target almost instantly
+    updateNextTarget();
+
+    // Re-enable the button after a short delay
+    setTimeout(() => {
+        purchasedBtn.disabled = false;
+    }, 500);
+});
+
+document.getElementById('undo-btn').addEventListener('click', () => {
+    if (purchasedList.length > 0) {
+        purchasedList.pop();
+        localStorage.setItem('purchasedList', JSON.stringify(purchasedList));
+        // To reflect the change, we need to reload data from the sheet
+        loadDataAndInitialize().then(updateNextTarget);
+    }
+});
+
+document.getElementById('reset-list-btn').addEventListener('click', () => {
+    if (confirm('購入リストを完全にリセットしますか？（スプレッドシートの情報はリセットされません）')) {
+        purchasedList = [];
+        localStorage.removeItem('purchasedList');
+        loadDataAndInitialize().then(updateNextTarget);
+    }
+});
+
+// --- Core Logic ---
+
+function updateNextTarget() {
+    const currentEWSN = document.getElementById('current-ewsn').value;
+    const currentLabel = document.getElementById('current-label').value;
+    const currentNumberStr = document.getElementById('current-number').value;
+
+    document.getElementById('loading').textContent = '最適ルートを検索中...';
+    document.getElementById('target-info').style.display = 'block';
+    document.querySelector('.target-details').style.display = 'none';
+    document.getElementById('target-tweet-container').style.display = 'none';
+
+    const remainingCircles = comiketData.wantToBuy.filter(c => !purchasedList.includes(c.space));
+
+    if (remainingCircles.length === 0) {
+        document.getElementById('loading').textContent = "完了";
+        return;
+    }
+
+    // Use a timeout to allow the UI to update before the potentially long calculation
+    setTimeout(() => {
+        const startNode = {
+            space: `${currentEWSN[0]}${currentLabel}${currentNumberStr}`,
+            isStart: true
+        };
+        const nodesForTsp = [startNode, ...remainingCircles];
+        const optimalPath = solveTsp(nodesForTsp);
+
+        const nextCircle = optimalPath.length > 1 ? optimalPath[1] : null;
+        if (!nextCircle) {
+            document.getElementById('loading').textContent = "完了";
+            return;
+        }
+
+        currentTarget = nextCircle;
+        const [startHall, startLabel, startNum] = distinct_space(startNode.space);
+        const [nextHall, nextLabel, nextNum] = distinct_space(nextCircle.space);
+        nextCircle.distance = calc_dist(startHall[0], startLabel, parseFloat(startNum), nextHall[0], nextLabel, parseFloat(nextNum));
+
+        // Update UI with the next target
+        document.getElementById('loading').textContent = '';
+        document.querySelector('.target-details').style.display = 'block';
+        document.getElementById('target-tweet-container').style.display = 'block';
+        document.getElementById('target-space').textContent = nextCircle.space;
+        document.getElementById('target-distance').textContent = nextCircle.distance;
+        const userLink = document.getElementById('target-user');
+        if (nextCircle.user) {
+            userLink.textContent = nextCircle.user.split('/').pop();
+            userLink.href = nextCircle.user;
+        } else {
+            userLink.textContent = 'N/A';
+            userLink.href = '#';
+        }
+        const tweetContainer = document.getElementById('target-tweet-container');
+        tweetContainer.innerHTML = '';
+        if (nextCircle.tweet && typeof twttr !== 'undefined' && twttr.widgets) {
+            const tweetIdMatch = nextCircle.tweet.match(/status\/(\d+)/);
+            if (tweetIdMatch && tweetIdMatch[1]) {
+                twttr.widgets.createTweet(tweetIdMatch[1], tweetContainer, { theme: 'light' })
+                    .catch(err => { console.error('Failed to embed tweet:', err); tweetContainer.innerHTML = '<p>ツイートの埋め込みに失敗しました。</p>'; });
+            } else {
+                tweetContainer.innerHTML = `<p><a href="${nextCircle.tweet}" target="_blank">お品書きツイートを見る</a></p>`;
+            }
+        } else if (nextCircle.tweet) {
+            tweetContainer.innerHTML = `<p><a href="${nextCircle.tweet}" target="_blank">お品書きツイートを見る</a></p>`;
+        } else {
+            tweetContainer.innerHTML = '<p>お品書き情報なし</p>';
+        }
+        updateRemainingCounts();
+    }, 10);
+}
+
+// --- TSP Solver (2-opt Heuristic) ---
+function solveTsp(nodes) {
+    if (nodes.length < 2) return nodes;
+    nodes.forEach((node, i) => node.__id = i);
+
+    const distMatrix = [];
+    for (let i = 0; i < nodes.length; i++) {
+        distMatrix[i] = [];
+        for (let j = 0; j < nodes.length; j++) {
+            if (i === j) { distMatrix[i][j] = 0; continue; }
+            const [ewsn1, label1, num1] = distinct_space(nodes[i].space);
+            const [ewsn2, label2, num2] = distinct_space(nodes[j].space);
+            distMatrix[i][j] = calc_dist(ewsn1[0], label1, parseFloat(num1), ewsn2[0], label2, parseFloat(num2));
+        }
+    }
+
+    let currentPath = [];
+    let remainingNodes = [...nodes];
+    let currentNode = remainingNodes.find(n => n.isStart) || remainingNodes.shift();
+    currentPath.push(currentNode);
+    remainingNodes = remainingNodes.filter(n => n.__id !== currentNode.__id);
+
+    while (remainingNodes.length > 0) {
+        let nearestNode = null, minDistance = Infinity;
+        for (const node of remainingNodes) {
+            const distance = distMatrix[currentNode.__id][node.__id];
+            if (distance < minDistance) { minDistance = distance; nearestNode = node; }
+        }
+        currentNode = nearestNode;
+        currentPath.push(currentNode);
+        remainingNodes = remainingNodes.filter(n => n.__id !== currentNode.__id);
+    }
+
+    let improved = true;
+    while (improved) {
+        improved = false;
+        for (let i = 1; i < currentPath.length - 2; i++) {
+            for (let j = i + 1; j < currentPath.length - 1; j++) {
+                const d1 = distMatrix[currentPath[i - 1].__id][currentPath[i].__id] + distMatrix[currentPath[j].__id][currentPath[j + 1].__id];
+                const d2 = distMatrix[currentPath[i - 1].__id][currentPath[j].__id] + distMatrix[currentPath[i].__id][currentPath[j + 1].__id];
+                if (d2 < d1) {
+                    const pathSegment = currentPath.slice(i, j + 1).reverse();
+                    currentPath = currentPath.slice(0, i).concat(pathSegment).concat(currentPath.slice(j + 1));
+                    improved = true;
+                }
+            }
+        }
+    }
+
+    nodes.forEach(node => delete node.__id);
+    return currentPath;
+}
+
+// --- Utility Functions ---
 function updateLabelOptions() {
     const hallSelect = document.getElementById('current-ewsn');
     const labelSelect = document.getElementById('current-label');
     const selectedHall = hallSelect.value;
     labelSelect.innerHTML = '';
-
     const options = labelOptions[selectedHall] || [];
     options.forEach(optionValue => {
         const option = document.createElement('option');
@@ -23,239 +238,54 @@ function updateLabelOptions() {
         labelSelect.appendChild(option);
     });
 }
-// 1. ページの読み込みが完了した時点で、最初のドロップダウンを生成する
-document.addEventListener('DOMContentLoaded', () => {
-    updateLabelOptions();
-    updateRemainingCounts();
-});
-// 2. 「東西南北」の選択が変更されたら、識別子リストを更新する
-document.getElementById('current-ewsn').addEventListener('change', updateLabelOptions);
 
-
-/**
- * 全角英数字を半角に変換する関数
- * @param {string} str - 変換したい文字列
- * @returns {string} 半角に変換された文字列
- */
 function toHalfWidth(str) {
-    return str.replace(/[！-～]/g, function(s) {
-        return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
-    });
+    if (!str) return '';
+    return str.replace(/[！-～]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
 }
 
-function distinct_space(space){
-  let ewsnChar = space[0]; // '東', '西', '南'
-  let labelChar = space[1]; // 'A', 'あ', 'a'
-  let numberPart = space.substring(2); // '1a', '12b' など
-
-  // ホールグループキー (例: '東456') を特定
-  let hallGroupKey = '';
-  for (const key in labelOptions) {
-      if (key.startsWith(ewsnChar) && labelOptions[key].includes(labelChar)) {
-          hallGroupKey = key;
-          break;
-      }
-  }
-
-  // 番号部分から数字のみを抽出
-  let number = '';
-  for (let i = 0; i < numberPart.length; i++) {
-      const char = numberPart[i];
-      if (char >= '0' && char <= '9') {
-          number += char;
-      } else {
-          break; // 数字以外の文字が出たら終了
-      }
-  }
-
-  return [hallGroupKey, labelChar, number];
-}
-
-function updateNextTarget() {
-    const currentewsn = (document.getElementById('current-ewsn').value);
-    const currentlabel = (document.getElementById('current-label').value);
-    
-    const numberInput = document.getElementById('current-number').value;
-    const currentnumber = parseFloat(toHalfWidth(numberInput));
-
-    document.getElementById('loading').textContent = '検索中...';
-    document.getElementById('target-info').style.display = 'none';
-
-    const targetCircles = comiketData.wantToBuy.map(circle => {
-        return {
-            space: circle.space,
-            user: circle.user, // user情報を追加
-            tweet: circle.tweet // tweet情報を追加
-        };
-    }).filter(circle =>
-        !purchasedList.includes(circle.space)
-    );
-    
-    const nextCircle = calculateNextCircle(currentewsn, currentlabel, currentnumber,targetCircles);
-    currentTarget = nextCircle;
-
-    const targetInfoDiv = document.getElementById('target-info');
-
-    if (nextCircle.message) { 
-        document.getElementById('loading').textContent = nextCircle.message;
-        // エラーメッセージ表示時はTwitter/お品書きを非表示
-        document.getElementById('target-user').textContent = '';
-        document.getElementById('target-user').href = '#';
-        document.getElementById('target-tweet-container').innerHTML = '';
-        targetInfoDiv.style.display = 'none'; // 情報表示エリアを非表示
-    } else { // 次の目的地が見つかった場合
-        document.getElementById('loading').textContent = '';
-        targetInfoDiv.style.display = 'block'; // 情報表示エリアを表示
-        document.getElementById('target-space').textContent = nextCircle.space;
-        document.getElementById('target-distance').textContent = nextCircle.distance;
-
-        // Twitterアカウントの表示
-        const userLink = document.getElementById('target-user');
-        if (nextCircle.user) {
-            userLink.textContent = nextCircle.user.split('/').pop(); // ユーザー名のみ表示
-            userLink.href = nextCircle.user;
-        } else {
-            userLink.textContent = 'N/A';
-            userLink.href = '#';
-        }
-
-        // お品書きツイートの埋め込み
-        const tweetContainer = document.getElementById('target-tweet-container');
-        tweetContainer.innerHTML = ''; // 前のツイートをクリア
-        if (nextCircle.tweet && twttr && twttr.widgets) {
-            // twttr.widgets.createTweet(tweetId, element, options)
-            // ツイートURLからIDを抽出
-            const tweetIdMatch = nextCircle.tweet.match(/status\/(\d+)/);
-            if (tweetIdMatch && tweetIdMatch[1]) {
-                twttr.widgets.createTweet(
-                    tweetIdMatch[1], // ツイートID
-                    tweetContainer, // 埋め込む要素
-                    { theme: 'light' } // オプション（ダークモードなど）
-                ).then(() => {
-                    // ツイート埋め込み成功時の処理（必要であれば）
-                }).catch(err => {
-                    console.error('Failed to embed tweet:', err);
-                    tweetContainer.innerHTML = '<p>ツイートの埋め込みに失敗しました。</p>';
-                });
-            } else {
-                tweetContainer.innerHTML = '<p><a href="' + nextCircle.tweet + '" target="_blank">お品書きツイートを見る</a></p>';
-            }
-        } else if (nextCircle.tweet) {
-            // twttrオブジェクトがまだロードされていない場合や、widgetsがない場合
-            tweetContainer.innerHTML = '<p><a href="' + nextCircle.tweet + '" target="_blank">お品書きツイートを見る</a></p>';
-        } else {
-            tweetContainer.innerHTML = '<p>お品書き情報なし</p>';
+function distinct_space(space) {
+    if (!space) return ['', '', ''];
+    let ewsnChar = space[0];
+    let labelChar = space[1];
+    let numberPart = toHalfWidth(space.substring(2));
+    let hallGroupKey = '';
+    for (const key in labelOptions) {
+        if (key.startsWith(ewsnChar) && labelOptions[key].includes(labelChar)) {
+            hallGroupKey = key;
+            break;
         }
     }
-    updateRemainingCounts(); // 残りサークル数を更新
-}
-
-//購入完了時の処理
-document.getElementById('purchased-btn').addEventListener('click', () => {
-    if (currentTarget && currentTarget.space) {
-        purchasedList.push(currentTarget.space);
-        localStorage.setItem('purchasedList', JSON.stringify(purchasedList));
-
-        // 現在地を今いたサークルの場所に更新
-        const [ewsn, label, number] = distinct_space(currentTarget.space);
-        document.getElementById('current-ewsn').value = ewsn;
-
-        // 識別子ドロップダウンを更新（新しいホールに合わせて）
-        updateLabelOptions();
-
-        document.getElementById('current-label').value = label;
-        document.getElementById('current-number').value = number;
-        
-        updateNextTarget();
+    let number = '';
+    for (let i = 0; i < numberPart.length; i++) {
+        const char = numberPart[i];
+        if (char >= '0' && char <= '9') number += char;
+        else break;
     }
-});
-
-
-function undoLastPurchase() {
-    if (purchasedList.length > 0) {
-        purchasedList.pop();
-        localStorage.setItem('purchasedList', JSON.stringify(purchasedList));
-        updateNextTarget();
-    }
+    return [hallGroupKey, labelChar, number];
 }
-
-function resetPurchasedList() {
-    if (confirm('購入リストを完全にリセットしてもよろしいですか？')) {
-        purchasedList = [];
-        localStorage.removeItem('purchasedList');
-        updateNextTarget();
-    }
-}
-document.getElementById('undo-btn').addEventListener('click', undoLastPurchase);
-document.getElementById('reset-list-btn').addEventListener('click', resetPurchasedList);
-
 
 function calc_dist(ewsn1, label1, number1, ewsn2, label2, number2) {
-  if (number1 > 32) number1 = 64 - number1;
-  if (number2 > 32) number2 = 64 - number2;
-  if (ewsn1.charAt(0) !== ewsn2.charAt(0)) {
-      return 1e9;
-  }
-  const labelDist = Math.abs(label1.charCodeAt(0) - label2.charCodeAt(0));
-  const numberDist = Math.abs(number1 - number2);
-  const dist = labelDist * 4 + numberDist;
-  return dist;
+    if (number1 > 32) number1 = 64 - number1;
+    if (number2 > 32) number2 = 64 - number2;
+    if (ewsn1 !== ewsn2) return 1e9;
+    const labelDist = Math.abs(label1.charCodeAt(0) - label2.charCodeAt(0));
+    const numberDist = Math.abs(number1 - number2);
+    return labelDist * 4 + numberDist;
 }
 
-
-function calculateNextCircle(currentewsn, currentlabel, currentnumber,targets) {
-  if (targets.length === 0) {
-    return { message: "完了" };
-  }
-
-  let nearestCircle = null;
-  let minDistance = 5e9;
-
-  targets.forEach(circle => {
-    const [targetewsn, targetlabel, targetnumberStr] = distinct_space(circle.space);
-    const targetnumber = parseFloat(targetnumberStr); // 文字列を数値に変換
-    const distance = calc_dist(currentewsn.charAt(0), currentlabel, currentnumber, targetewsn, targetlabel, targetnumber);
-    if (distance < minDistance) {
-      minDistance = distance;
-      nearestCircle = circle;
-    }
-  });
-  if (nearestCircle) {
-    return { ...nearestCircle, distance: minDistance };
-  }
-}
-
-// --- ここから追加 ---
-/**
- * ホールグループごとに未訪問のサークル数を計算し、表示を更新する関数
- */
 function updateRemainingCounts() {
-    // 1. 未訪問のサークルのリストを作成
-    const unvisitedCircles = comiketData.wantToBuy.filter(circle => 
-        !purchasedList.includes(circle.space)
-    );
-
-    // 2. ホールグループごとのカウンターを初期化
-    const counts = {
-        '東456': 0,
-        '東7': 0,
-        '西12': 0,
-        '南12': 0
-    };
-
-    // 3. 未訪問サークルを分類してカウント
+    const unvisitedCircles = comiketData.wantToBuy.filter(c => !purchasedList.includes(c.space));
+    const counts = { '東456': 0, '東7': 0, '西12': 0, '南12': 0 };
     unvisitedCircles.forEach(circle => {
         const [ewsn, label, _number] = distinct_space(circle.space);
-
-        for (const groupKey in labelOptions) { // groupKeyは '東456', '東7' など
+        for (const groupKey in labelOptions) {
             if (groupKey.startsWith(ewsn) && labelOptions[groupKey].includes(label)) {
                 counts[groupKey]++;
-                break; // 所属が確定したら次のサークルへ
+                break;
             }
         }
     });
-
-    // 4. 計算結果をHTMLに反映
     document.getElementById('count-E456').textContent = counts['東456'];
     document.getElementById('count-E7').textContent = counts['東7'];
     document.getElementById('count-W12').textContent = counts['西12'];
