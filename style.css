@@ -1,26 +1,22 @@
-@font-face {
-  font-family: 'Noto Sans JP';
-  font-style: normal;
-  font-weight: 400;
-  src: url('fonts/NotoSansJP-Thin.ttf') format('truetype');
-  font-display: swap;
-}
+@import url('https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500&display=swap');
 
+/* :rootはドキュメントの最上位要素を指す。ここではCSS全体で使う変数（カスタムプロパティ）を定義する */
 :root {
-    --primary-color: #007bff;
-    --primary-color-dark: #0056b3;
-    --success-color: #28a745;
-    --success-color-dark: #218838;
-    --secondary-color: #6c757d;
-    --background-color: #f4f7f9;
-    --text-color: #333;
-    --container-bg: #ffffff;
-    --border-color: #dee2e6;
-    --border-radius: 8px;
-    --box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    --font-family: 'Noto Sans JP', 'Helvetica Neue', Arial, sans-serif;
+    --primary-color: #007bff; /* メインカラー（青） */
+    --primary-color-dark: #0056b3; /* メインカラー（濃い青） */
+    --success-color: #28a745; /* 成功時の色（緑） */
+    --success-color-dark: #218838; /* 成功時の色（濃い緑） */
+    --secondary-color: #6c757d; /* サブカラー（グレー） */
+    --background-color: #f4f7f9; /* ページ全体の背景色 */
+    --text-color: #333; /* 基本の文字色 */
+    --container-bg: #ffffff; /* コンテナ部分の背景色（白） */
+    --border-color: #dee2e6; /* 境界線の色 */
+    --border-radius: 8px; /* 角の丸み */
+    --box-shadow: 0 4px 12px rgba(0,0,0,0.08); /* 影の効果 */
+    --font-family: 'Zen Maru Gothic', 'Noto Sans JP', 'Helvetica Neue', Arial, sans-serif; /* フォントの種類 */
 }
 
+/* body要素、つまりページ全体の基本的なスタイルを設定 */
 body {
     font-family: var(--font-family);
     background-color: var(--background-color);
@@ -30,6 +26,7 @@ body {
     padding: 1em;
 }
 
+/* .containerクラス、つまりページ全体を囲むメインのコンテナのスタイル */
 .container {
     max-width: 600px;
     margin: 2em auto;
@@ -39,18 +36,21 @@ body {
     box-shadow: var(--box-shadow);
 }
 
+/* h1とh2要素、つまり大見出しと中見出しのスタイル */
 h1, h2 {
     color: var(--primary-color);
     text-align: center;
     margin-bottom: 1em;
 }
 
+/* h2要素の個別のスタイル */
 h2 {
     margin-top: 0;
     border-bottom: 1px solid var(--border-color);
     padding-bottom: 0.5em;
 }
 
+/* #controlsと#next-target、つまり「現在地」と「次の目的地」の各セクションのスタイル */
 #controls, #next-target {
     margin-top: 1.5em;
     padding: 1.5em;
@@ -59,15 +59,17 @@ h2 {
     background-color: #fff;
 }
 
+/* #next-target、つまり「次の目的地」セクションの境界線の色を強調 */
 #next-target {
     border-color: var(--primary-color);
 }
 
+/* #target-info、つまり次の目的地の詳細情報エリア（デフォルトでは非表示） */
 #target-info {
     display: none; /* デフォルトで非表示 */
 }
 
-/* Modern Form Styling */
+/* #controls内のp要素、「現在地を入力」というテキストのスタイル */
 #controls p {
     margin-top: 0;
     margin-bottom: 1.5em;
@@ -75,6 +77,7 @@ h2 {
     color: #6c757d;
 }
 
+/* label要素、つまり各入力欄のラベルテキストのスタイル */
 label {
     display: flex;
     justify-content: space-between;
@@ -83,7 +86,7 @@ label {
     font-weight: 500;
 }
 
-input[type="text"],
+/* #current-numberとselect要素、つまり数字入力やセレクトボックスのスタイル */
 #current-number,
 select {
     width: 60%; /* Adjust width as needed */
@@ -105,6 +108,7 @@ select {
     padding-right: 2.5rem; /* Make space for arrow */
 }
 
+/* テキスト入力、数字入力、セレクトボックスがクリックされてフォーカス状態になった時のスタイル */
 input[type="text"]:focus,
 #current-number:focus,
 select:focus {
@@ -113,26 +117,7 @@ select:focus {
     box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.2);
 }
 
-/* Modern Button Styling */
-/* --- ここから修正 --- */
-#target-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px; /* ボタン間の隙間 */
-    margin-top: 1.5em;
-    justify-content: center; /* ボタンを中央揃え */
-    flex-direction: row; /* ボタンを横に並べる */
-}
-
-#target-actions button {
-    flex-grow: 0; /* 伸びないようにする */
-    width: auto; /* コンテンツの幅に合わせる */
-    margin-top: 0; /* 親要素のmargin-topで調整するためリセット */
-    font-size: 0.9em; /* ボタンの文字サイズを少し小さく */
-    padding: 0.6em 1em; /* ボタンのパディングを調整 */
-    display: block; /* 常に表示されるように明示的に指定 */
-}
-
+/* button要素、つまり全てのボタンに共通する基本スタイル */
 button {
     font-size: 1.1em;
     font-weight: 600;
@@ -150,56 +135,64 @@ button {
     font-family: inherit; /* フォントを継承 */
 }
 
+/* ボタンにマウスカーソルが乗った時（ホバー状態）のスタイル */
 button:hover {
     background-color: var(--primary-color-dark);
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 }
 
+/* #purchased-btn、つまり「購入済」ボタンの個別のスタイル */
 #purchased-btn {
     background-color: var(--success-color);
-    /* margin-top: 1.5em; */ /* #target-actions でまとめて管理 */
 }
 
+/* 「購入済」ボタンがホバー状態になった時のスタイル */
 #purchased-btn:hover {
     background-color: var(--success-color-dark);
 }
 
+/* #undo-btn、つまり「一つ前に戻す」ボタンの個別のスタイル */
 #undo-btn {
     background-color: var(--secondary-color);
 }
 
+/* 「一つ前に戻す」ボタンがホバー状態になった時のスタイル */
 #undo-btn:hover {
     background-color: #5a6268;
 }
 
+/* #reset-list-btn、つまり「購入リストをリセット」ボタンの個別のスタイル */
 #reset-list-btn {
     background-color: #dc3545; /* Red for danger */
 }
 
+/* 「購入リストをリセット」ボタンがホバー状態になった時のスタイル */
 #reset-list-btn:hover {
     background-color: #c82333;
 }
-/* --- ここまで修正 --- */
 
+/* #target-info内のp要素、つまり次の目的地情報の各行（スペース、距離など）のスタイル */
 #target-info p {
     margin: 0.8em 0;
     font-size: 1.1em;
 }
 
+/* #target-info内のp要素の中のstrong要素、つまり「スペース:」などのラベル部分のスタイル */
 #target-info p strong {
     color: #333;
     min-width: 80px;
     display: inline-block;
 }
 
+/* #loading、つまり「検索中...」などのロード中テキストのスタイル */
 #loading {
     color: #6c757d;
     font-style: italic;
     text-align: center;
 }
 
-/* Remaining Counts Styling */
+/* #remaining-counts、つまり各ホールの残りサークル数を表示するエリアのスタイル */
 #remaining-counts {
     display: flex;
     flex-wrap: wrap;
@@ -211,6 +204,7 @@ button:hover {
     border-bottom: 1px solid var(--border-color);
 }
 
+/* #remaining-counts内のp要素、つまり各カウント表示（例: 東456: 0）のスタイル */
 #remaining-counts p {
     margin: 0; /* pタグのデフォルトマージンをリセット */
     padding: 0.4em 0.8em;
@@ -222,25 +216,88 @@ button:hover {
     font-weight: 500;
 }
 
-/* Responsive Design */
+/* @media ... はレスポンシブデザインのための設定。画面幅が600px以下（スマホなど）の場合に適用される */
 @media (max-width: 600px) {
+    /* .containerの幅を画面に合わせる */
     .container {
         margin: 1em;
         padding: 1.5em;
     }
 
+    /* h1の文字サイズを少し小さくする */
     h1 {
         font-size: 1.6em;
     }
 
+    /* labelの配置を縦並びにする */
     label {
         flex-direction: column;
         align-items: flex-start;
     }
 
+    /* 入力欄の幅を画面いっぱいに広げる */
     input[type="text"],
     #current-number {
         width: calc(100% - 24px); /* Full width minus padding */
         margin-top: 0.5em;
     }
+}
+
+/* .target-header-content、次の目的地のヘッダー部分（詳細情報とアクションボタンを囲む）のスタイル */
+.target-header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start; /* Align items to the top */
+    flex-wrap: wrap; /* Allow wrapping on smaller screens */
+}
+
+/* .target-details、スペース名や距離などの詳細情報エリアのスタイル */
+.target-details {
+    flex: 1 1 250px; /* Grow, shrink, and base width */
+}
+
+/* #target-actions、つまり「購入済」などのアクションボタン群を囲むコンテナのスタイル */
+#target-actions {
+    flex: 0 0 auto; /* Don't grow or shrink, size based on content */
+    display: flex;
+    flex-direction: column; /* Stack buttons vertically */
+    gap: 10px; /* Space between buttons */
+    align-items: flex-end; /* Align buttons to the right */
+    margin-left: 1em; /* Space from the details */
+}
+
+/* #target-actions内のボタンのスタイル */
+#target-actions button {
+    width: auto; /* Let the button size to its content */
+    padding: 0.6em 1.2em; /* Adjust padding */
+    font-size: 0.9em;
+    margin-top: 0; /* Remove top margin as gap is used */
+}
+
+/* #target-tweet-container、つまり埋め込みツイートを表示するコンテナのスタイル */
+#target-tweet-container {
+    margin-top: 1.5em;
+    border-top: 1px solid var(--border-color);
+    padding-top: 1.5em;
+}
+
+/* --- 以前の修正箇所（重複のためコメントアウトまたは削除しても良いが、念のため残す） --- */
+/* #target-actionsの再定義 */
+#target-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px; /* ボタン間の隙間 */
+    margin-top: 1.5em;
+    justify-content: center; /* ボタンを中央揃え */
+    flex-direction: row; /* ボタンを横に並べる */
+}
+
+/* #target-actions内のボタンの再定義 */
+#target-actions button {
+    flex-grow: 0; /* 伸びないようにする */
+    width: auto; /* コンテンツの幅に合わせる */
+    margin-top: 0; /* 親要素のmargin-topで調整するためリセット */
+    font-size: 0.9em; /* ボタンの文字サイズを少し小さく */
+    padding: 0.6em 1em; /* ボタンのパディングを調整 */
+    display: block; /* 常に表示されるように明示的に指定 */
 }

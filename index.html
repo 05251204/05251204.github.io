@@ -8,11 +8,10 @@
     <link rel="manifest" href="manifest.json">
 </head>
 <body>
-    <a class="twitter-timeline" href="https://twitter.com/okitugu1101?ref_src=twsrc%5Etfw">Tweets by okitugu1101</a> <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
     <div class="container">
-        <h1>TSP in Comiketland</h1>
-
     <div id="controls">
+        <label for="gas-url-input" style="font-weight: bold; margin-bottom: 0.5em; display: block;">Google Apps Script URL:</label>
+        <input type="text" id="gas-url-input" placeholder="Enter your Web App URL" style="width: 100%; padding: 8px; margin-bottom: 1em; box-sizing: border-box;">
         <p>現在地を入力</p>
         <label>東西南北: 
             <select id="current-ewsn">
@@ -34,7 +33,7 @@
         </div>
 
         <br><br>
-        <button onclick="updateNextTarget()">次の目的地を検索</button>
+        <button id="search-button">次の目的地を検索</button>
     </div>
     
     <div id="next-target">
@@ -51,6 +50,7 @@
                     <button id="purchased-btn">購入済</button>
                     <button id="undo-btn">一つ前に戻す</button>
                     <button id="reset-list-btn">購入リストをリセット</button>
+                    <button id="refresh-data-btn">スプレッドシートから更新</button>
                 </div>
             </div>
             <div id="target-tweet-container"></div>

@@ -1,3 +1,4 @@
+
 let purchasedList = JSON.parse(localStorage.getItem('purchasedList')) || [];
 let currentTarget = null;
 let comiketData = { wantToBuy: [] }; // Initialize with empty array
@@ -10,60 +11,126 @@ const labelOptions = {
 };
 
 // --- Data Loading and Initialization ---
-async function loadDataAndInitialize() {
-    const webAppURL = 'https://script.google.com/macros/s/AKfycbzETF2Hl4rsLBObOcpK736wiavYput5AsXdyUIl9czz8NgW9mFkrksKtLy8sZDbE5A/exec';
+async function loadDataAndInitialize(forceRefresh = false) {
+    const webAppURL = document.getElementById('gas-url-input').value;
+    if (!webAppURL) {
+        document.getElementById('loading').textContent = 'Google Apps ScriptのURLを入力してください。';
+        return;
+    }
+
+    // Try to load from localStorage first
+    if (!forceRefresh) {
+        const savedComiketData = localStorage.getItem('comiketData');
+        if (savedComiketData) {
+            try {
+                comiketData.wantToBuy = JSON.parse(savedComiketData).wantToBuy || [];
+                updateRemainingCounts();
+                document.getElementById('loading').textContent = 'ローカルデータから準備完了。目的地を検索してください。';
+                return; // Data loaded from localStorage, no need to fetch
+            } catch (e) {
+                console.error('Error parsing comiketData from localStorage:', e);
+                // If parsing fails, proceed to fetch from network
+            }
+        }
+    }
+
+    document.getElementById('loading').textContent = 'シートからデータを読み込み中...';
     try {
         const response = await fetch(webAppURL);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
         comiketData.wantToBuy = data.wantToBuy || [];
+        localStorage.setItem('comiketData', JSON.stringify(comiketData)); // Save to localStorage
         updateRemainingCounts();
+        document.getElementById('loading').textContent = '準備完了。目的地を検索してください。';
     } catch (error) {
         console.error('Error loading sheet data via Apps Script:', error);
-        document.getElementById('loading').textContent = 'データの読み込みに失敗しました。';
+        document.getElementById('loading').textContent = 'データの読み込みに失敗しました。URLが正しいか確認してください。';
     }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    const gasUrlInput = document.getElementById('gas-url-input');
+    const savedUrl = localStorage.getItem('webAppURL');
+    
+    if (savedUrl) {
+        gasUrlInput.value = savedUrl;
+    }
+
+    let debounceTimeout;
+    gasUrlInput.addEventListener('input', () => {
+        // Clear the previous timeout
+        clearTimeout(debounceTimeout);
+        
+        // Save to localStorage immediately
+        localStorage.setItem('webAppURL', gasUrlInput.value);
+        
+        // Set a new timeout to fetch data after user stops typing
+        debounceTimeout = setTimeout(() => {
+            if (gasUrlInput.value) {
+                loadDataAndInitialize();
+            }
+        }, 500); // 500ms delay
+    });
+
     updateLabelOptions();
-    loadDataAndInitialize();
+    // Automatically trigger a data load on startup if URL is present
+    if (gasUrlInput.value) {
+        loadDataAndInitialize();
+    } else {
+        document.getElementById('loading').textContent = 'Google Apps ScriptのURLを入力してください。';
+    }
+
+    // Add event.preventDefault() to all buttons to prevent default form submission/navigation
+    document.querySelectorAll('button').forEach(button => {
+        button.addEventListener('click', (event) => {
+            event.preventDefault();
+        });
+    });
+
+    // Also, if there's an implicit form, prevent its submission
+    document.addEventListener('submit', (event) => {
+        event.preventDefault();
+    });
 });
 
 // --- UI Event Handlers ---
 document.getElementById('current-ewsn').addEventListener('change', updateLabelOptions);
 
-document.getElementById('purchased-btn').addEventListener('click', () => {
+document.getElementById('purchased-btn').addEventListener('click', (event) => {
+    event.preventDefault();
     if (!currentTarget || !currentTarget.space) return;
 
     const spaceToUpdate = currentTarget.space;
 
     // --- Fire-and-forget Request ---
-    // Update the sheet in the background. We don't wait for the response.
-    // We only log the result for debugging, without alerting the user.
-    const webAppURL = 'https://script.google.com/macros/s/AKfycbzETF2Hl4rsLBObOcpK736wiavYput5AsXdyUIl9czz8NgW9mFkrksKtLy8sZDbE5A/exec';
-    fetch(webAppURL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ space: spaceToUpdate })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.status !== 'success') {
-            console.error('Background sheet update failed:', data.message);
-        } else {
-            console.log(`Background sheet update successful for ${spaceToUpdate}.`);
-        }
-    })
-    .catch(error => {
-        console.error('Background sheet update fetch failed:', error);
-    });
+    const webAppURL = document.getElementById('gas-url-input').value;
+    if (webAppURL) {
+        fetch(webAppURL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ space: spaceToUpdate })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status !== 'success') {
+                console.error('Background sheet update failed:', data.message);
+            } else {
+                console.log(`Background sheet update successful for ${spaceToUpdate}.`);
+            }
+        })
+        .catch(error => {
+            console.error('Background sheet update fetch failed:', error);
+        });
+    } else {
+        console.warn('GAS URL is not provided. Skipping sheet update.');
+    }
 
     // --- Immediate UI Update ---
     const purchasedBtn = document.getElementById('purchased-btn');
     purchasedBtn.disabled = true; // Briefly disable to prevent double-clicks
 
     // Update local data immediately
-    comiketData.wantToBuy = comiketData.wantToBuy.filter(c => c.space !== spaceToUpdate);
     purchasedList.push(spaceToUpdate);
     localStorage.setItem('purchasedList', JSON.stringify(purchasedList));
     
@@ -82,26 +149,100 @@ document.getElementById('purchased-btn').addEventListener('click', () => {
     }, 500);
 });
 
-document.getElementById('undo-btn').addEventListener('click', () => {
+document.getElementById('undo-btn').addEventListener('click', (event) => {
+    event.preventDefault();
     if (purchasedList.length > 0) {
-        purchasedList.pop();
+        const spaceToUndo = purchasedList.pop(); // Get the item that was just un-purchased
         localStorage.setItem('purchasedList', JSON.stringify(purchasedList));
-        // To reflect the change, we need to reload data from the sheet
-        loadDataAndInitialize().then(updateNextTarget);
+
+        // --- Fire-and-forget Request for Undo ---
+        const webAppURL = document.getElementById('gas-url-input').value;
+        if (webAppURL) {
+            fetch(webAppURL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ space: spaceToUndo, undo: true }) // Send undo flag
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status !== 'success') {
+                    console.error('Background sheet undo failed:', data.message);
+                } else {
+                    console.log(`Background sheet undo successful for ${spaceToUndo}.`);
+                }
+            })
+            .catch(error => {
+                console.error('Background sheet undo fetch failed:', error);
+            });
+        } else {
+            console.warn('GAS URL is not provided. Skipping sheet undo.');
+        }
+
+        // After updating purchasedList, simply re-calculate the next target based on current comiketData
+        updateNextTarget();
     }
 });
 
-document.getElementById('reset-list-btn').addEventListener('click', () => {
-    if (confirm('購入リストを完全にリセットしますか？（スプレッドシートの情報はリセットされません）')) {
+document.getElementById('reset-list-btn').addEventListener('click', (event) => {
+    event.preventDefault();
+    if (confirm('購入リストを完全にリセットしますか？（スプレッドシートの情報もリセットされます）')) {
+        const webAppURL = document.getElementById('gas-url-input').value;
+        if (!webAppURL) {
+            console.warn('GAS URL is not provided. Skipping sheet reset.');
+            // Still reset local list even if no URL
+            purchasedList = [];
+            localStorage.removeItem('purchasedList');
+            updateNextTarget();
+            return;
+        }
+
+        const itemsToReset = [...purchasedList]; // Create a copy
+        if (itemsToReset.length > 0) {
+            fetch(webAppURL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                // 配列を 'spaces' というキーで送信する
+                body: JSON.stringify({ spaces: itemsToReset, undo: true })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status !== 'success') {
+                    console.error('Background sheet batch reset failed:', data.message);
+                } else {
+                    console.log('Background sheet batch reset successful.');
+                }
+            })
+            .catch(error => {
+                console.error('Background sheet batch reset fetch failed:', error);
+            });
+        }
+
+        // Reset local purchasedList immediately
         purchasedList = [];
         localStorage.removeItem('purchasedList');
-        loadDataAndInitialize().then(updateNextTarget);
+        updateNextTarget();
     }
+});
+
+document.getElementById('refresh-data-btn').addEventListener('click', (event) => {
+    event.preventDefault();
+    loadDataAndInitialize(true).then(updateNextTarget);
+});
+
+document.getElementById('search-button').addEventListener('click', (event) => {
+    event.preventDefault();
+    updateNextTarget();
 });
 
 // --- Core Logic ---
 
 function updateNextTarget() {
+    const webAppURL = document.getElementById('gas-url-input').value;
+    if (!webAppURL) {
+        document.getElementById('loading').textContent = 'Google Apps ScriptのURLを入力してください。';
+        return;
+    }
+
     const currentEWSN = document.getElementById('current-ewsn').value;
     const currentLabel = document.getElementById('current-label').value;
     const currentNumberStr = document.getElementById('current-number').value;
