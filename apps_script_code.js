@@ -1,50 +1,31 @@
-/**
- * 全角の英数字や記号を半角に変換するヘルパー関数
- * @param {string} original - 変換元の文字列
- * @returns {string} - 半角に変換された文字列
- */
 function convertCharacters(original) {
-  let converted = ""; // 変換後の文字列を格納する変数
-  const pattern = /[Ａ-Ｚａ-ｚ０-９]/; // 全角英数字を検出するための正規表現パターン
-
-  // 受け取った文字列を1文字ずつループ処理
+  let converted = "";
+  const pattern = /[Ａ-Ｚａ-ｚ０-９]/;
   for (let i = 0; i < original.length; i++) {
-    // 文字が全角英数字の場合
     if (pattern.test(original[i])) {
-      // 文字コードをデクリメントして半角に変換
       const half = String.fromCharCode(original[i].charCodeAt(0) - 65248);
       converted += half;
     } else {
-      // 全角英数字でなければ、そのまま追加
       converted += original[i];
     }
   }
-  // 全角スペースを半角スペースに、全角ピリオドを半角ピリオドに置換
   converted = converted.replace(/　/g, ' ').replace(/．/g, '.');
   return converted;
 }
 
-/**
- * スプレッドシートでセルが編集されたときに自動で実行される関数（要トリガー設定）
- * 主にスペース情報を整形して、決められたフォーマットでセルに再設定する
- */
 function autoUpdateDate() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet();
-  const current = sheet.getActiveCell(); // 現在アクティブなセルを取得
-  const currentRow = current.getRow(); // 行番号
-  const currentColumn = current.getColumn(); // 列番号
-
-  // 4列目（D列）が編集された場合に処理を実行
+  const current = sheet.getActiveCell();
+  const currentRow = current.getRow();
+  const currentColumn = current.getColumn();
   if (currentRow >= 1 && currentColumn == 4) {
     const updateRange = sheet.getRange("D" + currentRow);
-    const pattern = /[A-Za-zあ-んア-ンａ-ｚＡ-Ｚ]/; // アルファベット・ひらがな・カタカナのパターン
-    const pattern2 = /[0-9]/; // 数字のパターン
-    const val = current.getValue(); // セルの値を取得
-    let ans = ""; // 整形後の文字列
-    let tf1 = false; // 「東/西/南/北」を検出したかどうかのフラグ
-    let tf2 = false; // 地区のアルファベットを検出したかどうかのフラグ
-
-    // セルの値を1文字ずつチェックして整形
+    const pattern = /[A-Za-zあ-んア-ンａ-ｚＡ-Ｚ]/;
+    const pattern2 = /[0-9]/;
+    const val = current.getValue();
+    let ans = "";
+    let tf1 = false;
+    let tf2 = false;
     for (const c of val) {
       if (!tf1 && (c == '東' || c == '西' || c == '南' || c == '北')) {
         ans += c;
@@ -62,52 +43,50 @@ function autoUpdateDate() {
         }
         if (c == 'a' || c == 'b') {
           ans += c;
-          if (c == 'b') break; // 'b'まで来たら終了
+          if (c == 'b') break;
         }
       }
     }
-    // 全角英数字を半角に変換
     ans = convertCharacters(ans);
-    // 整形した値をセルに設定
     updateRange.setValue(ans);
   }
 }
 
-// --- 設定項目 ---
+// --- グローバル設定項目 ---
 // 読み書きの対象となるシート名のリスト。必要に応じて追加・変更してください。
-const TARGET_SHEET_NAMES = ["シート1", "シート2"]; 
-// サークルのスペース情報が書かれている列のヘッダー名
+const TARGET_SHEET_NAMES = ["day1_1"]; 
+// サークルのスペース情報が書かれている列のヘッダー名（完全一致）。
 const SPACE_COLUMN_NAME = "space";
-// 購入済みかどうかを記録する列のヘッダー名
+// 購入済みかどうかを記録する列のヘッダー名（完全一致）。
 const STATUS_COLUMN_NAME = "soldout";
-// 購入済みの印としてセルに書き込む文字
+// 購入済みの印としてセルに書き込む文字。
 const PURCHASED_STATUS_TEXT = "x";
 // --- 設定項目ここまで ---
 
 /**
- * WebページからのGETリクエストを処理する関数
- * 複数のシートからデータを取得し、JSON形式で結合して返す
- * @param {object} e - Apps Scriptが受け取るイベントオブジェクト
- * @returns {ContentService.TextOutput} - JSON形式のレスポンス
+ * WebページからのGETリクエストを処理するメイン関数。
+ * 複数のシートから「購入済みでない」サークル情報を取得し、JSON形式で返す。
+ * @param {object} e - Apps Scriptが受け取るイベントオブジェクト。
+ * @returns {ContentService.TextOutput} - wantToBuyキーを持つJSON形式のレスポンス。
  */
 function doGet(e) {
-  let combinedResult = []; // 複数のシートの結果を結合するための配列
+  let combinedResult = []; // 複数のシートの結果を結合するための配列。
 
-  // 設定されたシート名でループ処理
+  // 設定されたシート名でループ処理。
   TARGET_SHEET_NAMES.forEach(sheetName => {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
-    // シートが見つからない場合は警告を出してスキップ
+    // シートが見つからない場合は警告を出してスキップ。
     if (!sheet) {
       console.warn(`Sheet "${sheetName}" not found. Skipping.`);
       return;
     }
 
-    const data = sheet.getDataRange().getValues(); // シートの全データを取得
+    const data = sheet.getDataRange().getValues(); // シートの全データを二次元配列として取得。
 
-    // ヘッダー行（1行目）を取得し、小文字に変換して整形
+    // ヘッダー行（1行目）を取得し、小文字に変換・空白削除して整形。
     const headers = data.shift().map(h => String(h).toLowerCase().replace(/\s+/g, ''));
 
-    // データ行をオブジェクトの配列に変換
+    // データ行をオブジェクトの配列に変換。
     const sheetResult = data.map(row => {
       const obj = {};
       headers.forEach((header, i) => {
@@ -115,57 +94,60 @@ function doGet(e) {
       });
       return obj;
     }).filter(row => 
-      // スペース列に値があり、かつ購入済みでない行のみをフィルタリング
+      // スペース列に値があり、かつ購入済みステータスでない行のみをフィルタリング。
       row[SPACE_COLUMN_NAME.toLowerCase()] && row[STATUS_COLUMN_NAME.toLowerCase()] !== PURCHASED_STATUS_TEXT
     );
 
-    // 現在のシートの結果を結合
+    // 現在のシートの結果を全体の結果に結合。
     combinedResult = combinedResult.concat(sheetResult);
   });
 
-  // 最終的な結果をJSON形式で返す
+  // 最終的な結果をJSON形式で返す。
   return ContentService.createTextOutput(JSON.stringify({ wantToBuy: combinedResult }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
 /**
- * WebページからのPOSTリクエストを処理する関数
- * 指定されたスペースの購入ステータスを更新（または元に戻す）
- * @param {object} e - Apps Scriptが受け取るイベントオブジェクト（POSTデータを含む）
- * @returns {ContentService.TextOutput} - JSON形式の処理結果レスポンス
+ * WebページからのPOSTリクエストを処理するメイン関数。
+ * 指定されたスペースの購入ステータスを更新（または元に戻す）。
+ * @param {object} e - Apps Scriptが受け取るイベントオブジェクト（POSTデータを含む）。
+ * @returns {ContentService.TextOutput} - JSON形式の処理結果レスポンス。
  */
 function doPost(e) {
   try {
+    // POSTされたJSONデータをパース（解析）。
     const postData = JSON.parse(e.postData.contents);
-    const undo = postData.undo || false;
+    const undo = postData.undo || false;   // undoフラグ（購入取り消しかどうか）。なければfalseになる。
 
     // --- バッチリセット処理 ---
-    // postDataに 'spaces' というキーで配列が渡され、かつ undo=true の場合に動作
+    // postDataに 'spaces' というキーで配列が渡され、かつ undo=true の場合に動作。
     if (postData.spaces && Array.isArray(postData.spaces) && undo) {
       const spacesToReset = postData.spaces;
       let resetCount = 0;
 
+      // 設定された各シートを順番に検索。
       for (const sheetName of TARGET_SHEET_NAMES) {
         const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
-        if (!sheet) continue;
+        if (!sheet) continue; // シートが存在しない場合はスキップ。
 
         const data = sheet.getDataRange().getValues();
         const headers = data[0];
         const spaceColumnIndex = headers.indexOf(SPACE_COLUMN_NAME);
         const statusColumnIndex = headers.indexOf(STATUS_COLUMN_NAME);
 
-        if (spaceColumnIndex === -1 || statusColumnIndex === -1) continue;
+        if (spaceColumnIndex === -1 || statusColumnIndex === -1) continue; // 必要な列がなければスキップ。
 
+        // データ行をループして、リセット対象のスペースを探す。
         for (let i = 1; i < data.length; i++) {
-          // リセット対象のスペース配列に、現在の行のスペースが含まれているかチェック
+          // リセット対象のスペース配列に、現在の行のスペースが含まれているかチェック。
           if (spacesToReset.includes(data[i][spaceColumnIndex])) {
-            // 含まれていれば、ステータス列のセルを空にする
+            // 含まれていれば、ステータス列のセルを空にする。
             sheet.getRange(i + 1, statusColumnIndex + 1).setValue('');
             resetCount++;
           }
         }
       }
-      // 処理結果を返す
+      // 処理結果を返す。
       return ContentService.createTextOutput(JSON.stringify({ status: "success", message: `Batch reset successful for ${resetCount} items.` }))
         .setMimeType(ContentService.MimeType.JSON);
     }
@@ -173,49 +155,50 @@ function doPost(e) {
 
     // --- 既存の単一更新処理 ---
     const spaceToUpdate = postData.space;
+    // スペース番号が提供されていない場合はエラーを返す。
     if (!spaceToUpdate) {
       return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "No space provided" }))
         .setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 設定された各シートを順番に検索
+    // 設定された各シートを順番に検索。
     for (const sheetName of TARGET_SHEET_NAMES) {
       const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
-      if (!sheet) continue; // シートが存在しない場合はスキップ
+      if (!sheet) continue; // シートが存在しない場合はスキップ。
 
       const data = sheet.getDataRange().getValues();
       const headers = data[0];
-      // ヘッダー名から「space」列と「soldout」列のインデックス番号を取得
+      // ヘッダー名から「space」列と「soldout」列のインデックス番号を取得。
       const spaceColumnIndex = headers.indexOf(SPACE_COLUMN_NAME);
       const statusColumnIndex = headers.indexOf(STATUS_COLUMN_NAME);
 
-      // 必要な列が見つからない場合は、このシートをスキップして次のシートへ
+      // 必要な列が見つからない場合は、このシートをスキップして次のシートへ。
       if (spaceColumnIndex === -1 || statusColumnIndex === -1) {
         continue;
       }
 
-      // データ行をループして、一致するスペースを探す
+      // データ行をループして、一致するスペースを探す。
       for (let i = 1; i < data.length; i++) {
         if (data[i][spaceColumnIndex] == spaceToUpdate) {
-          // undoがtrueならステータスを空に、falseなら購入済みの印を書き込む
+          // undoがtrueならステータスを空に、falseなら購入済みの印を書き込む。
           if (undo) {
             sheet.getRange(i + 1, statusColumnIndex + 1).setValue('');
           } else {
             sheet.getRange(i + 1, statusColumnIndex + 1).setValue(PURCHASED_STATUS_TEXT);
           }
-          // 成功レスポンスを返して処理を終了
+          // 成功レスポンスを返して処理を終了。
           return ContentService.createTextOutput(JSON.stringify({ status: "success", message: `Updated ${spaceToUpdate} in ${sheetName}, undo: ${undo}` }))
             .setMimeType(ContentService.MimeType.JSON);
         }
       }
     }
 
-    // 全てのシートを検索してもスペースが見つからなかった場合
+    // 全てのシートを検索してもスペースが見つからなかった場合。
     return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Space not found in any of the specified sheets" }))
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (error) {
-    // その他のエラーが発生した場合
+    // その他の予期せぬエラーが発生した場合。
     return ContentService.createTextOutput(JSON.stringify({ status: "error", message: error.message }))
       .setMimeType(ContentService.MimeType.JSON);
   }
